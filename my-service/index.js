@@ -9,6 +9,8 @@ app.use(express.json())
 const PORT = 3000
 const SECRET = "123321123"
 
+const attributes = ["str", "agl", "int"];
+const keys = ["q", "w", "e", "d", "f", "r"];
 const auth = (req, res, next) => {
     const authHeader = req.headers.authorization
 
@@ -107,69 +109,234 @@ app.get("/api/auth/profile", auth, (req, res) => {
 
 app.post("/api/heroes", auth, (req, res) => {
     try {
-        const { title, description} = req.body
+        const { name, description, attribute, movementSpeed, str, agl, int, hp } = req.body
 
-        if (!title || !title.trim()) {
+        if (!name || !name.trim()) {
             return res
                 .status(400)
-                .json({ error: "Нужно название" })
+                .json({ error: "Нужно имя" })
         }
 
         if (!description || !description.trim()) {
             return res
                 .status(400)
-                .json({ error: "Нужно описание" })
+                .json({ error: "Нужно указать описание" })
         }
 
+        if (!attribute || !attributes.includes(attribute)) {
+            return res
+                .status(400)
+                .json({ error: "Нужен атрибут" })
+        }
+
+        if (!movementSpeed || !movementSpeed.trim()) {
+            return res
+                .status(400)
+                .json({ error: "Нужно указать скорость" })
+        }
+
+        if (!str || !str.trim()) {
+            return res
+                .status(400)
+                .json({ error: "Нужно указать силу" })
+        }
+
+        if (!agl || !agl.trim()) {
+            return res
+                .status(400)
+                .json({ error: "Нужно указать ловкость" })
+        }
+
+        if (!int || !int.trim()) {
+            return res
+                .status(400)
+                .json({ error: "Нужно указать интеллект" })
+        }
+
+        if (!hp || !hp.trim()) {
+            return res
+                .status(400)
+                .json({ error: "Нужно указать здоровье" })
+        }
+
+        
+
         const info = db.prepare(`
-            INSERT INTO heroes (title, description, createdBy)
-            VALUES (?, ?, ?)
-            `).run(title.trim(), description.trim(), req.user.id)
+            INSERT INTO heroes (name, description, attribute, movementSpeed, str, agl, int, hp, createdBy)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(name.trim(), description.trim(), attribute.trim(), movementSpeed, str, agl, int, hp,  req.user.id)
 
         const newHero = db
             .prepare("SELECT * FROM heroes WHERE id = ?")
             .get(info.lastInsertRowid)
 
         return res.status(201).json(newHero)
-    } catch(err) {
+    } catch(err) {console.error(err);
         return res.status(500).json({error: "Something went wrong"})
     }
 })
 
-app.post("/api/guides", auth, (req, res) => {
+app.post("/api/spell", auth, (req, res) => {
     try {
-        const { rating, comment } = req.body
-        const { id } = req.params
-        const book = db.prepare("SELECT * FROM books WHERE id = ?").get(id)
-        if (!book) {
-            return res.status(404).json({ error: "Такой книжки не существует" })
-        }
-        if (!rating || !(rating > 0 && rating <= 5)) {
-            return res
-                .status(400)
-                .json({ error: "Укажите оценку" })
+        const { heroesId, title , key, manaCost, cooldown, description   } = req.body;
+        const userId = req.user.id;
+
+        const hero = db.prepare("SELECT * FROM heroes WHERE id = ?").get(heroesId);
+        if (!hero) {
+            return res.status(404).json({ error: "Такого героя не существует" });
         }
 
-        if (!comment || !comment.trim()) {
-            return res
-                .status(400)
-                .json({ error: "Напишите отзыв" })
+        const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+        if (!user) {
+            return res.status(404).json({ error: "Пользователь не найден" });
         }
 
+        if (!title || !title.trim()) {
+            return res.status(400).json({ error: "Нужно название" });
+        }
+        
+        if (!description || !description.trim()) {
+            return res.status(400).json({ error: "Описание обязательно" });
+        }
+
+        if (!key || !keys.includes(key)) {
+            return res
+                .status(400)
+                .json({ error: "Нужна клавиша" })
+        }
+
+        if (!manaCost || manaCost < 0) {
+            return res.status(400).json({ error: "Нужно указать манакост" });
+        }
+
+        if (!cooldown || cooldown < 0) {
+            return res.status(400).json({ error: "Нужно указать перезарядку" });
+        }
+        
         const info = db.prepare(`
-            INSERT INTO review (userId, bookId, rating, comment)
-            VALUES (?, ?, ?, ? )
-            `).run(req.user.id, id, Number(rating), comment.trim())
+            INSERT INTO spell (userId, heroesId, title, description, key, manaCost, cooldown )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(userId, heroesId, title.trim(), description.trim(), key.trim(), manaCost, cooldown );
 
-        const newGuide = db
-            .prepare("SELECT * FROM guides WHERE id = ?")
-            .get(info.lastInsertRowid)
+        const newSpell = db
+            .prepare("SELECT * FROM spell WHERE id = ?")
+            .get(info.lastInsertRowid);
 
-        return res.status(201).json(newGuide)
+        return res.status(201).json(newSpell);
     } catch (err) {
-        console.error(err)
-        return res.status(500).json({ error: "Failed to create" })
+        console.error(err);
+        return res.status(500).json({ error: "Failed to create spell" });
+    }
+});
+
+app.get("/api/heroes/:id", (req, res) => {
+    try {
+        const { id } = req.params
+        const hero = db.prepare("SELECT * FROM heroes WHERE id = ?").get(id)
+        if (!hero) return res.status(404).json({ error: "Герой не найден" })
+        const spell = db.prepare("SELECT * FROM spell WHERE heroesId = ?").all(id)
+        return res.status(200).json({ ...hero, spells: spell })
+    } catch (error) {
+        console.error(error)
+        res.status(500).json({ error: "Something went wrong" })
     }
 })
+app.get("/api/heroes", (req, res) => {
+    try {
+        const hero = db.prepare(
+            "SELECT * FROM heroes ORDER BY createdAt DESC"
+        ).all()
+
+        return res.status(200).json(hero)
+    } catch (err) {
+        console.error(err)
+        return res.status(500).json({ error: "Failed to fetch" })
+    }
+})
+app.get("/api/spell", (req, res) => {
+    try {
+        const spells = db.prepare(
+            "SELECT * FROM spell ORDER BY createdAt DESC"
+        ).all()
+
+        return res.status(200).json(spells)
+    } catch (err) {
+        console.error(err)
+        return res.status(500).json({ error: "Failed to fetch" })
+    }
+})
+
+app.put("/api/heroes/:id", auth, (req, res) => {
+    try {
+        const { id } = req.params
+        const hero = db.prepare("SELECT * FROM heroes WHERE id = ?").get(id)
+        if (!hero) {
+            return res.status(404).json({ error: "Hero not found" });
+        }
+        const newHero = { ...hero, ...req.body }
+        const updateStmt = db.prepare("UPDATE heroes SET name = ?, description = ?, attribute = ?, movementSpeed = ?, str = ?, agl = ?, int = ?, hp = ? WHERE id = ? ")
+        const result = updateStmt.run(
+            newHero.name,
+            newHero.description,
+            newHero.attribute,
+            newHero.movementSpeed,
+            newHero.str,
+            newHero.agl,
+            newHero.int,
+            newHero.hp,
+            id
+        );
+        const newHeroFromDB = db.prepare("SELECT * FROM heroes WHERE id = ?").get(id)
+
+        res.status(200).json(newHeroFromDB);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Failed to update hero" });
+    }
+})
+app.put("/api/spell/:id", auth, (req, res) => {
+    try {
+        const { id } = req.params
+        const spells = db.prepare("SELECT * FROM spell WHERE id = ?").get(id)
+        if (!spells) {
+            return res.status(404).json({ error: "Spell not found" });
+        }
+        const newSpell = { ...spells, ...req.body }
+        const updateStmt = db.prepare("UPDATE spell SET  title = ?, description = ?, key = ?, manaCost = ?, cooldown = ? WHERE id = ? ")
+        const result = updateStmt.run(
+            newSpell.title,
+            newSpell.description,
+            newSpell.key,
+            newSpell.manaCost,
+            newSpell.cooldown,
+            id
+        );
+        const newSpellFromDB = db.prepare("SELECT * FROM spell WHERE id = ?").get(id)
+
+        res.status(200).json(newSpellFromDB);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Failed to update spell" });
+    }
+})
+
+app.delete("/api/heroes/:id", auth, (req, res) => {
+    try {
+        const { id } = req.params
+        const hero = db.prepare("SELECT * FROM heroes WHERE id = ?").get(id)
+        if (!hero) return res.status(404).json({ error: "Герой не найден" })
+        if (!(['admin'].includes(req.user.role) || req.user.id === hero.createdBy)) {
+            return res
+            .status(403)
+            .json({message: 'Доступ запрещен: недостаточно прав'})
+        }
+        db.prepare('DELETE FROM heroes WHERE id = ?').run(id)
+        return res.status(200).json({ message: 'Deleted successfully' })
+    } catch (error) {
+        console.error(error)
+        res.status(500).json({ error: "Something went wrong" })
+    }
+})
+
 
 app.listen(PORT)
