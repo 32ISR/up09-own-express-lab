@@ -338,5 +338,21 @@ app.delete("/api/heroes/:id", auth, (req, res) => {
     }
 })
 
-
+app.delete("/api/spell/:id", auth, (req, res) => {
+    try {
+        const { id } = req.params
+        const spells = db.prepare("SELECT * FROM spell WHERE id = ?").get(id)
+        if (!spells) return res.status(404).json({ error: "Способность не найдена" })
+        if (!(['admin'].includes(req.user.role) || req.user.id === spells.userId)) {
+            return res
+            .status(403)
+            .json({message: 'Доступ запрещен: недостаточно прав'})
+        }
+        db.prepare('DELETE FROM spell WHERE id = ?').run(id)
+        return res.status(200).json({ message: 'Deleted successfully' })
+    } catch (error) {
+        console.error(error)
+        res.status(500).json({ error: "Something went wrong" })
+    }
+})
 app.listen(PORT)
