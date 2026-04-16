@@ -273,6 +273,11 @@ app.put("/api/heroes/:id", auth, (req, res) => {
         if (!hero) {
             return res.status(404).json({ error: "Hero not found" });
         }
+        if (!(['admin'].includes(req.user.role) || req.user.id === hero.createdBy)) {
+            return res
+            .status(403)
+            .json({message: 'Доступ запрещен: недостаточно прав'})
+        }
         const newHero = { ...hero, ...req.body }
         const updateStmt = db.prepare("UPDATE heroes SET name = ?, description = ?, attribute = ?, movementSpeed = ?, str = ?, agl = ?, int = ?, hp = ? WHERE id = ? ")
         const result = updateStmt.run(
@@ -301,6 +306,11 @@ app.put("/api/spell/:id", auth, (req, res) => {
         if (!spells) {
             return res.status(404).json({ error: "Spell not found" });
         }
+        if (req.user.id !== spells.userId || !(['admin'].includes(req.user.role))) {
+            return res
+            .status(403)
+            .json({message: 'Доступ запрещен: недостаточно прав'})
+        }
         const newSpell = { ...spells, ...req.body }
         const updateStmt = db.prepare("UPDATE spell SET  title = ?, description = ?, key = ?, manaCost = ?, cooldown = ? WHERE id = ? ")
         const result = updateStmt.run(
@@ -325,7 +335,7 @@ app.delete("/api/heroes/:id", auth, (req, res) => {
         const { id } = req.params
         const hero = db.prepare("SELECT * FROM heroes WHERE id = ?").get(id)
         if (!hero) return res.status(404).json({ error: "Герой не найден" })
-        if (!(['admin'].includes(req.user.role) || req.user.id === hero.createdBy)) {
+        if (req.user.id !== hero.createdBy || !(['admin'].includes(req.user.role))) {
             return res
             .status(403)
             .json({message: 'Доступ запрещен: недостаточно прав'})
